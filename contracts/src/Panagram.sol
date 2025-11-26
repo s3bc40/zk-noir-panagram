@@ -78,15 +78,19 @@ contract Panagram is ERC1155, Ownable {
             });
         }
         // Prepare public inputs for verifier
-        bytes32[] memory publicInputs = new bytes32[](1);
+        bytes32[] memory publicInputs = new bytes32[](2);
         publicInputs[0] = s_answer;
+        publicInputs[1] = bytes32(uint256(uint160(msg.sender))); // cast to bytes32
 
         // Verify the proof
-        bool proofResult = s_verifier.verify(_proof, publicInputs);
-        if (!proofResult) {
+        try s_verifier.verify(_proof, publicInputs) returns (bool proofResult) {
+            if (!proofResult) {
+                revert Panagram__InvalidProof();
+            }
+        } catch {
+            // Any revert from the verifier means invalid proof
             revert Panagram__InvalidProof();
         }
-
         // Proof is valid - reward the user
         s_lastCorrectGuesRound[msg.sender] = s_currentRound;
         if (s_currentRoundWinner == address(0)) {

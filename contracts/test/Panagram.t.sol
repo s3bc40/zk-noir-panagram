@@ -12,6 +12,7 @@ contract PanagramTest is Test {
     bytes32 public s_answerHash;
 
     address s_user = makeAddr("user");
+    address s_user2 = makeAddr("user2");
 
     // Ensure compatibility with the ZK-SNARK circuit (same as in Verifier.sol)
     // Large prime number defines the finite field over which the ZK proof system's arithmetic operates.
@@ -36,7 +37,7 @@ contract PanagramTest is Test {
     // Test someone receives NFT 0 when they guess correctly first
     function testCorrectFirstGuess() public {
         vm.prank(s_user);
-        bytes memory proof = _getProof(s_answerHash, s_answerHash);
+        bytes memory proof = _getProof(s_answerHash, s_answerHash, s_user);
         s_panagram.makeGuess(proof);
         vm.assertEq(s_panagram.balanceOf(s_user, 0), 1);
         vm.assertEq(s_panagram.balanceOf(s_user, 1), 0);
@@ -47,21 +48,87 @@ contract PanagramTest is Test {
     }
 
     // Test someone receives NFT 1 when they guess correctly second
+    function testSecondGuessPasses() public {
+        vm.prank(s_user);
+        bytes memory proof = _getProof(s_answerHash, s_answerHash, s_user);
+        s_panagram.makeGuess(proof);
+        vm.assertEq(s_panagram.balanceOf(s_user, 0), 1);
+        vm.assertEq(s_panagram.balanceOf(s_user, 1), 0);
+
+        vm.prank(s_user2);
+        bytes memory proof2 = _getProof(s_answerHash, s_answerHash, s_user2);
+        s_panagram.makeGuess(proof2);
+        vm.assertEq(
+            s_panagram.balanceOf(s_user2, 0),
+            0,
+            "User2 should not get NFT 0"
+        );
+        vm.assertEq(
+            s_panagram.balanceOf(s_user2, 1),
+            1,
+            "User2 should get NFT 1"
+        );
+    }
 
     // Test we can start a new round after min duration or conditions met
+    function testStartSecondRound() public {
+        // First user guesses correctly
+        vm.prank(s_user);
+        bytes memory proof = _getProof(s_answerHash, s_answerHash, s_user);
+        s_panagram.makeGuess(proof);
+
+        // Move time forward by min duration
+        vm.warp(s_panagram.MIN_DURATION() + 1);
+
+        // Define new answer
+        bytes32 newHashedAnswer = keccak256(bytes("newpanagram"));
+        bytes32 newAnswerHash = bytes32(
+            uint256(newHashedAnswer) % FIELD_MODULUS
+        );
+        s_panagram.newRound(newAnswerHash);
+
+        vm.assertEq(
+            s_panagram.s_currentRound(),
+            2,
+            "Current round should be 2 after starting new round"
+        );
+        vm.assertEq(
+            s_panagram.s_currentRoundWinner(),
+            address(0),
+            "Winner should be reset"
+        );
+        vm.assertEq(
+            s_panagram.s_answer(),
+            newAnswerHash,
+            "Answer hash should be updated for new round"
+        );
+    }
+
+    // Test that an invalid proof is rejected
+    function testIncorrectGuessFails() public {
+        vm.prank(s_user);
+        bytes32 fakeAnswerHash = keccak256(bytes("wronganswer"));
+        fakeAnswerHash = bytes32(uint256(fakeAnswerHash) % FIELD_MODULUS);
+        bytes memory proof = _getProof(fakeAnswerHash, fakeAnswerHash, s_user);
+
+        vm.expectRevert(Panagram.Panagram__InvalidProof.selector);
+        s_panagram.makeGuess(proof);
+    }
 
     // Get proof generation working with FFI
     function _getProof(
         bytes32 guess,
-        bytes32 correctAnswer
+        bytes32 correctAnswer,
+        address sender
     ) internal returns (bytes memory _proof) {
-        uint256 NUM_ARGS = 5;
+        uint256 NUM_ARGS = 6;
         string[] memory inputs = new string[](NUM_ARGS);
         inputs[0] = "npx";
         inputs[1] = "tsx";
         inputs[2] = "../scripts/generateProof.ts";
         inputs[3] = vm.toString(guess);
         inputs[4] = vm.toString(correctAnswer);
+        inputs[5] = vm.toString(sender);
 
         // Call the script via FFI
         bytes memory encodedProof = vm.ffi(inputs);
