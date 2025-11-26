@@ -1,66 +1,39 @@
-## Foundry
+# ZK Panagram
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+## Core Game Concept
 
-Foundry consists of:
+The game revolves around "answers" (e.g., specific words), where each correct answer defines a "round."
 
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+Essentially, each "answer" corresponds to a unique "round."
 
-## Documentation
+Rounds are designed to be continuous. The contract owner has the exclusive ability to initiate the subsequent round.
 
-https://book.getfoundry.sh/
+## Owner's Role and Responsibilities
 
-## Usage
+- A designated smart contract owner will exist.
+- Crucially, only this owner is authorized to start a new round of the game.
 
-### Build
+## Round Mechanics and Rules
 
-```shell
-$ forge build
-```
+- **Minimum Duration**: Each round must last for a predefined minimum duration.
+- **Starting New Rounds**: A new round can only be initiated if the preceding round has concluded with a declared winner.
+- **Determining the Winner**: The winner of a round is the first user to submit the correct guess for that round's answer.
+- **Runners-Up**: Other users who submit correct guesses after the official winner has been determined are acknowledged as "runners-up."
 
-### Test
+## NFT Contract (ERC-1155 Standard)
 
-```shell
-$ forge test
-```
+The main Panagram smart contract will adhere to the ERC-1155 token standard. This standard is chosen for its ability to manage multiple distinct token types (semi-fungible tokens) within a single contract.
 
-### Format
+- **Token ID 0**: This token ID will be minted and awarded to the winners of each round.
+- **Token ID 1**: This token ID will be minted and awarded to the runners-up in each round.
 
-```shell
-$ forge fmt
-```
+## Token Minting Logic
 
-### Gas Snapshots
+- **Token ID 0 (Winner's Token)** is exclusively minted to the user who is the first to submit a correct guess in a given round.
+- **Token ID 1 (Runner-Up Token)** is minted to users who submit a correct guess but are not the first to do so in that round.
 
-```shell
-$ forge snapshot
-```
+## Verifier Smart Contract Integration
 
-### Anvil
+To ascertain the correctness of a user's submitted guess, the Panagram contract will delegate this task by calling a separate, specialized "Verifier smart contract."
 
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+The blockchain address of this Verifier contract will be a required parameter, passed into the Panagram contract's constructor during deployment.
