@@ -6,6 +6,7 @@ remappings = [
     "@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/",
     "forge-std/=lib/forge-std/src/",
 ]
+ffi = true # warning: enables foreign function interface, use with caution
 
 [lint]
 exclude_lints = [
