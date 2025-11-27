@@ -10,6 +10,7 @@ contract PanagramTest is Test {
     HonkVerifier public s_verifier;
     Panagram public s_panagram;
     bytes32 public s_answerHash;
+    bytes32 public s_answerDoubleHash;
 
     address s_user = makeAddr("user");
     address s_user2 = makeAddr("user2");
@@ -25,19 +26,29 @@ contract PanagramTest is Test {
         s_panagram = new Panagram(IVerifier(s_verifier));
 
         // Create the answer hash for "panagram"
-        bytes32 hashedAnswer = keccak256(bytes("panagram")); // Hash the answer
+        bytes32 hashedAnswer = keccak256(abi.encodePacked("panagram")); // Hash the answer
         // Reduce the hash modulo the field modulus to fit within the SNARK field
         // Necessity of ensuring data passed from Solidity to a Noir circuit
         s_answerHash = bytes32(uint256(hashedAnswer) % FIELD_MODULUS);
 
+        // Double hash for commitment
+        bytes32 doubleHashedAnswer = keccak256(abi.encodePacked(s_answerHash));
+        s_answerDoubleHash = bytes32(
+            uint256(doubleHashedAnswer) % FIELD_MODULUS
+        );
+
         // Start the first round
-        s_panagram.newRound(s_answerHash);
+        s_panagram.newRound(s_answerDoubleHash);
     }
 
     // Test someone receives NFT 0 when they guess correctly first
     function testCorrectFirstGuess() public {
         vm.prank(s_user);
-        bytes memory proof = _getProof(s_answerHash, s_answerHash, s_user);
+        bytes memory proof = _getProof(
+            s_answerHash,
+            s_answerDoubleHash,
+            s_user
+        );
         s_panagram.makeGuess(proof);
         vm.assertEq(s_panagram.balanceOf(s_user, 0), 1);
         vm.assertEq(s_panagram.balanceOf(s_user, 1), 0);
@@ -50,13 +61,21 @@ contract PanagramTest is Test {
     // Test someone receives NFT 1 when they guess correctly second
     function testSecondGuessPasses() public {
         vm.prank(s_user);
-        bytes memory proof = _getProof(s_answerHash, s_answerHash, s_user);
+        bytes memory proof = _getProof(
+            s_answerHash,
+            s_answerDoubleHash,
+            s_user
+        );
         s_panagram.makeGuess(proof);
         vm.assertEq(s_panagram.balanceOf(s_user, 0), 1);
         vm.assertEq(s_panagram.balanceOf(s_user, 1), 0);
 
         vm.prank(s_user2);
-        bytes memory proof2 = _getProof(s_answerHash, s_answerHash, s_user2);
+        bytes memory proof2 = _getProof(
+            s_answerHash,
+            s_answerDoubleHash,
+            s_user2
+        );
         s_panagram.makeGuess(proof2);
         vm.assertEq(
             s_panagram.balanceOf(s_user2, 0),
@@ -74,18 +93,28 @@ contract PanagramTest is Test {
     function testStartSecondRound() public {
         // First user guesses correctly
         vm.prank(s_user);
-        bytes memory proof = _getProof(s_answerHash, s_answerHash, s_user);
+        bytes memory proof = _getProof(
+            s_answerHash,
+            s_answerDoubleHash,
+            s_user
+        );
         s_panagram.makeGuess(proof);
 
         // Move time forward by min duration
         vm.warp(s_panagram.MIN_DURATION() + 1);
 
         // Define new answer
-        bytes32 newHashedAnswer = keccak256(bytes("newpanagram"));
+        bytes32 newHashedAnswer = keccak256(abi.encodePacked("newpanagram"));
         bytes32 newAnswerHash = bytes32(
             uint256(newHashedAnswer) % FIELD_MODULUS
         );
-        s_panagram.newRound(newAnswerHash);
+        bytes32 newDoubleHashedAnswer = keccak256(
+            abi.encodePacked(newAnswerHash)
+        );
+        newDoubleHashedAnswer = bytes32(
+            uint256(newDoubleHashedAnswer) % FIELD_MODULUS
+        );
+        s_panagram.newRound(newDoubleHashedAnswer);
 
         vm.assertEq(
             s_panagram.s_currentRound(),
@@ -99,7 +128,7 @@ contract PanagramTest is Test {
         );
         vm.assertEq(
             s_panagram.s_answer(),
-            newAnswerHash,
+            newDoubleHashedAnswer,
             "Answer hash should be updated for new round"
         );
     }
@@ -107,9 +136,19 @@ contract PanagramTest is Test {
     // Test that an invalid proof is rejected
     function testIncorrectGuessFails() public {
         vm.prank(s_user);
-        bytes32 fakeAnswerHash = keccak256(bytes("wronganswer"));
+        bytes32 fakeAnswerHash = keccak256(abi.encodePacked("wronganswer"));
         fakeAnswerHash = bytes32(uint256(fakeAnswerHash) % FIELD_MODULUS);
-        bytes memory proof = _getProof(fakeAnswerHash, fakeAnswerHash, s_user);
+        bytes32 doubleHashedFakeAnswer = keccak256(
+            abi.encodePacked(fakeAnswerHash)
+        );
+        doubleHashedFakeAnswer = bytes32(
+            uint256(doubleHashedFakeAnswer) % FIELD_MODULUS
+        );
+        bytes memory proof = _getProof(
+            fakeAnswerHash,
+            doubleHashedFakeAnswer,
+            s_user
+        );
 
         vm.expectRevert(Panagram.Panagram__InvalidProof.selector);
         s_panagram.makeGuess(proof);

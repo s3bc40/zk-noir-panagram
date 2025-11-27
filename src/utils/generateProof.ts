@@ -17,7 +17,7 @@ export async function generateProof(
     const honk = new UltraHonkBackend(circuit.bytecode, { threads: 1 });
     const inputs = {
       guess_hash: guess,
-      answer_hash: ANSWER_HASH,
+      answer_double_hash: ANSWER_HASH,
       address: address,
     };
 
